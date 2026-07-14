@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>超軽量レジスター for WiiU</title>
+<style>
+  /* Wii UのGamePad画面幅（横854px / 縦480px）に最適化 */
+  body {
+    font-family: sans-serif;
+    margin: 0;
+    padding: 5px;
+    background-color: #f0f3f5;
+    color: #333;
+    font-size: 14px;
+  }
+  h1 {
+    font-size: 16px;
+    margin: 3px 0;
+    text-align: center;
+    color: #0070c0;
+  }
+  .container {
+    display: flex;
+    max-width: 840px;
+    margin: 0 auto;
+    gap: 8px;
+  }
+  /* 左側：商品選択・テンキー */
+  .left-panel {
+    flex: 1.3;
+  }
+  /* 右側：計算結果・レシート表示 */
+  .right-panel {
+    flex: 1;
+    background-color: #fff;
+    border: 2px dashed #999;
+    padding: 8px;
+    border-radius: 4px;
+  }
+  /* 商品ボタンエリア */
+  .items-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 5px;
+    margin-bottom: 8px;
+  }
+  .btn-item {
+    background-color: #e1f5fe;
+    border: 1px solid #0288d1;
+    border-radius: 4px;
+    padding: 10px 4px;
+    font-size: 13px;
+    font-weight: bold;
+    cursor: pointer;
+    text-align: center;
+  }
+  .btn-item:active {
+    background-color: #b3e5fc;
+  }
+  /* 電卓風テンキー */
+  .keypad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+  }
+  .btn-key {
+    background-color: #f5f5f5;
+    border: 1px solid #ccc;
+    padding: 12px;
+    font-size: 16px;
+    font-weight: bold;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .btn-key:active {
+    background-color: #ddd;
+  }
+  .btn-action {
+    background-color: #ffcc80;
+    border-color: #f57c00;
+  }
+  .btn-action:active {
+    background-color: #ffe0b2;
+  }
+  /* レシート表示部 */
+  .receipt-box {
+    background: #fffff0;
+    border: 1px solid #ddd;
+    padding: 5px;
+    min-height: 200px;
+    max-height: 310px;
+    overflow-y: auto;
+    font-family: monospace;
+    font-size: 12px;
+    white-space: pre-wrap;
+  }
+  /* 商品マスタ編集エリア（最下部） */
+  .master-panel {
+    margin-top: 10px;
+    background: #eaf2f8;
+    padding: 8px;
+    border-radius: 4px;
+    border: 1px solid #b2cbe0;
+  }
+  .master-title {
+    font-size: 13px;
+    font-weight: bold;
+    margin-bottom: 5px;
+    color: #1b4f72;
+  }
+  .master-inputs input {
+    font-size: 12px;
+    padding: 4px;
+    width: 25%;
+    margin-right: 5px;
+  }
+  .btn-sub {
+    font-size: 11px;
+    padding: 4px 8px;
+    background: #5dade2;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  /* リスト削除用 */
+  .master-list {
+    margin-top: 5px;
+    font-size: 11px;
+    max-height: 80px;
+    overflow-y: auto;
+    background: #fff;
+    padding: 4px;
+    border: 1px solid #ddd;
+  }
+  .master-item {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 2px;
+    border-bottom: 1px dotted #ccc;
+  }
+  .btn-del {
+    background: #e74c3c;
+    color: white;
+    border: none;
+    font-size: 9px;
+    padding: 1px 4px;
+    border-radius: 2px;
+  }
+</style>
+</head>
+<body>
+
+<h1>🎮 WiiUかんたん電子レジ</h1>
+
+<div class="container">
+  
+  <!-- 左：入力パネル -->
+  <div class="left-panel">
+    <!-- 商品ボタン（動的に追加されます） -->
+    <div class="items-grid" id="items-grid"></div>
+    
+    <!-- 金額入力用キーパッド -->
+    <div class="keypad">
+      <button class="btn-key" onclick="pressNum(7)">7</button>
+      <button class="btn-key" onclick="pressNum(8)">8</button>
+      <button class="btn-key" onclick="pressNum(9)">9</button>
+      <button class="btn-key" onclick="pressNum(4)">4</button>
+      <button class="btn-key" onclick="pressNum(5)">5</button>
+      <button class="btn-key" onclick="pressNum(6)">6</button>
+      <button class="btn-key" onclick="pressNum(1)">1</button>
+      <button class="btn-key" onclick="pressNum(2)">2</button>
+      <button class="btn-key" onclick="pressNum(3)">3</button>
+      <button class="btn-key btn-action" onclick="clearCart()">とりけし</button>
+      <button class="btn-key" onclick="pressNum(0)">0</button>
+      <button class="btn-key btn-action" onclick="calcTotal()">会計(お預り)</button>
+    </div>
+  </div>
+  
+  <!-- 右：レシート・小計パネル -->
+  <div class="right-panel">
+    <div style="font-weight: bold; margin-bottom: 4px;">お預かり金入力: <span id="input-cash" style="color:blue; font-size:16px;">0</span> 円</div>
+    <div class="receipt-box" id="receipt">ここにレシートが表示されます</div>
+  </div>
+
+</div>
+
+<!-- 下：商品マスタ登録・編集（軽量JavaScriptで動作） -->
+<div class="master-panel">
+  <div class="master-title">⚙️ 商品登録・メニュー編集</div>
+  <div class="master-inputs">
+    <input type="text" id="new-name" placeholder="商品名 (例: ポテト)">
+    <input type="number" id="new-price" placeholder="価格 (例: 150)">
+    <button class="btn-sub" onclick="addItem()">追加/更新</button>
+  </div>
+  <div class="master-list" id="master-list"></div>
+</div>
+
+<script>
+  // 初期商品データ（Wii Uのメモリに優しい超シンプルな配列）
+  var products = [
+    { name: "リンゴ", price: 120 },
+    { name: "牛乳", price: 210 },
+    { name: "パン", price: 150 }
+  ];
+
+  var cart = [];
+  var currentInputCash = ""; // テンキーで入力中のお預かり金額
+
+  // 画面の更新処理（重いDOM操作を避け、シンプルなinnerHTML書き換えで実行）
+  function renderAll() {
+    // 1. 商品ボタンの生成
+    var gridHtml = "";
+    for (var i = 0; i < products.length; i++) {
+      gridHtml += '<button class="btn-item" onclick="addToCart(' + i + ')">' + 
+                  products[i].name + '<br>' + products[i].price + '円</button>';
+    }
+    document.getElementById("items-grid").innerHTML = gridHtml;
+
+    // 2. マスタ編集リストの生成
+    var listHtml = "";
+    for (var i = 0; i < products.length; i++) {
+      listHtml += '<div class="master-item"><span>' + products[i].name + ' (' + products[i].price + '円)</span>' +
+                  '<button class="btn-del" onclick="deleteItem(' + i + ')">削除</button></div>';
+    }
+    document.getElementById("master-list").innerHTML = listHtml;
+
+    updateReceipt();
+  }
+
+  // カートに商品を追加
+  function addToCart(index) {
+    var p = products[index];
+    // すでにカートにあれば個数を増やす
+    var found = false;
+    for (var i = 0; i < cart.length; i++) {
+      if (cart[i].name === p.name) {
+        cart[i].qty++;
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      cart.push({ name: p.name, price: p.price, qty: 1 });
+    }
+    updateReceipt();
+  }
+
+  // レシート・金額計算の表示更新
+  function updateReceipt() {
+    var total = 0;
+    var receiptText = "====== ﾚｼｰﾀﾞｰ =======\n\n";
+    
+    if (cart.length === 0) {
+      receiptText += " お買い物をお待ちしています\n";
+    } else {
+      for (var i = 0; i < cart.length; i++) {
+        var subTotal = cart[i].price * cart[i].qty;
+        total += subTotal;
+        receiptText += cart[i].name + " x " + cart[i].qty + "\n";
+        receiptText += "               " + subTotal + "円\n";
+      }
+    }
+    
+    var tax = Math.floor(total * 0.1);
+    var grandTotal = total + tax;
+
+    receiptText += "---------------------\n";
+    receiptText += "本体合計:      " + total + "円\n";
+    receiptText += "消費税(10%):   " + tax + "円\n";
+    receiptText += "総合計:        " + grandTotal + "円\n";
+    receiptText += "---------------------\n";
+
+    document.getElementById("receipt").innerText = receiptText;
+    document.getElementById("input-cash").innerText = currentInputCash || "0";
+    return grandTotal;
+  }
+
+  // テンキー入力
+  function pressNum(num) {
+    currentInputCash += num.toString();
+    updateReceipt();
+  }
+
+  // とりけしボタン（カートと入力をリセット）
+  function clearCart() {
+    cart = [];
+    currentInputCash = "";
+    updateReceipt();
+  }
+
+  // 会計ボタン（お釣りの計算）
+  function calcTotal() {
+    var grandTotal = updateReceipt();
+    var cash = parseInt(currentInputCash, 10) || 0;
+
+    if (cash < grandTotal) {
+      alert("お預かり金が足りません！");
+      return;
+    }
+
+    var change = cash - grandTotal;
+    var receiptText = document.getElementById("receipt").innerText;
+    
+    // レシートにお預かりとお釣りを追記
+    receiptText += "お預かり:      " + cash + "円\n";
+    receiptText += "お釣り:        " + change + "円\n";
+    receiptText += "=====================\n";
+    receiptText += "  ありがとうございました！\n";
+
+    document.getElementById("receipt").innerText = receiptText;
+    
+    // 会計が終わったら次の入力に備えて初期化
+    cart = [];
+    currentInputCash = "";
+  }
+
+  // 商品の追加・更新
+  function addItem() {
+    var nameInput = document.getElementById("new-name");
+    var priceInput = document.getElementById("new-price");
+    var name = nameInput.value.trim();
+    var price = parseInt(priceInput.value, 10);
+
+    if (!name || isNaN(price)) {
+      alert("正しい名前と価格を入力してください");
+      return;
+    }
+
+    // 重複チェック（あれば上書き、なければ新規追加）
+    var exists = false;
+    for (var i = 0; i < products.length; i++) {
+      if (products[i].name === name) {
+        products[i].price = price;
+        exists = true;
+        break;
+      }
+    }
+    if (!exists) {
+      products.push({ name: name, price: price });
+    }
+
+    // 入力欄を空にして再描画
+    nameInput.value = "";
+    priceInput.value = "";
+    renderAll();
+  }
+
+  // 商品の削除
+  function deleteItem(index) {
+    products.splice(index, 1);
+    renderAll();
+  }
+
+  // 起動時の初期レンダリング
+  renderAll();
+</script>
+
+</body>
+</html>
